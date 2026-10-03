@@ -1,0 +1,9 @@
+.DS_Store
+*.mov
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.heic
+IMG_*
+node_modules/

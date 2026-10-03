@@ -126,7 +126,7 @@ function mediaFromBytes(bytes, drawing, captions) {
   const m = Core.decodeItem(bytes);
   return { type: m.type, w: m.w, h: m.h, fps: m.fps, frames: m.frames, bytes, drawing: !!drawing && m.type === 1, captions: m.type === 3 ? fitCaps(captions, m.frames.length) : [] };
 }
-const fitCaps = (caps, n) => Array.from({ length: n }, (_, i) => (caps && typeof caps[i] === 'string' ? caps[i] : '').slice(0, LIM.cap));
+const fitCaps = (caps, n) => Array.from({ length: n }, (_, i) => str(caps && caps[i], LIM.cap));
 
 // ---------- serialisation ----------
 function guideJSON(g, mode) { // mode 'link' → media by part index (fills parts), 'draft' → inline base64
@@ -215,8 +215,10 @@ function mediaPixels(p) {
   return (p[1] << 8 | p[2]) * (p[3] << 8 | p[4]) * n;
 }
 
-const str = (v, max) => typeof v === 'string' ? v.slice(0, max) : '';
+// Strip control characters and bidi overrides: a link must not be able to reorder or spoof displayed text.
+const str = (v, max) => typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, '').slice(0, max) : '';
 async function decodeGuide(hash) {
+  if (hash.length > 1000000) throw new LinkError('too-big'); // absurd link: refuse before doing any work
   let data = hash.replace(/^#/, '');
   try { data = decodeURIComponent(data); } catch {}
   data = data.replace(/\s+/g, '');
@@ -227,7 +229,7 @@ async function decodeGuide(hash) {
   const media = parts.filter(p => p[0] >= 1 && p[0] <= 3), struct = parts.find(p => p[0] === 4 || p[0] === 5);
   if (!media.length && !struct) throw new LinkError(parts.length ? 'newer' : 'damaged');
   let px = 0; for (const p of media) px += mediaPixels(p);
-  if (px > 30e6 || media.length > 100) throw new LinkError('too-big'); // a tiny link claiming huge frames
+  if (px > 12e6 || media.length > 40) throw new LinkError('too-big'); // a tiny link claiming huge frames
   const decoded = media.map(p => {
     try { return mediaFromBytes(p.slice(), false, null); } catch { throw new LinkError('damaged'); }
   });
@@ -951,7 +953,7 @@ async function openFromHash() {
   try { await tick(); g = await decodeGuide(hash); }
   catch (e) { console.warn('link error', e); linkErr = e instanceof LinkError ? e.code : 'damaged'; setView('error'); return true; }
   const rec = loadRecord(g.id), gs = draftString(g);
-  if (rec && rec.data !== gs && sig(rec.data) !== rec.base) {
+  if (rec && rec.data !== gs && sig(rec.data) !== rec.base) { // same-id links are normal replies, so only ask when this phone has unshared edits
     // This phone has changes to this guide that were never shared. Ask — never overwrite silently.
     let mine; try { mine = guideFromDraft(rec.data); } catch { mine = null; }
     if (mine) return askConflict(g, mine, rec);
@@ -988,7 +990,7 @@ async function start() {
   if (cur && loadRecord(cur)) { openRecord(cur); return; }
   setView('home');
 }
-window.addEventListener('hashchange', () => { if (location.hash.length > 1) openFromHash(); });
+window.addEventListener('hashchange', () => { if (location.hash.length > 1) { saveNow(); openFromHash(); } });
 window.addEventListener('pagehide', saveNow);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
 $('#homeBtn').addEventListener('click', () => { saveNow(); if (location.hash) history.replaceState(null, '', location.pathname + location.search); sess.set('current', ''); setView('home'); });

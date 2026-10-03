@@ -502,7 +502,7 @@ function codeFrame(rc, enc, cur, prev, w, h, M) {
 }
 
 // Limits shared by encoder and decoder, so the app can never make a link it would refuse to open.
-const LIMITS = { side: 2048, steps: 16, frames: 600, pixels: 50e6 };
+const LIMITS = { side: 2048, steps: 16, frames: 600, pixels: 12e6 };
 
 // item: { type: 1 photo | 2 flipbook | 3 steps, w, h, fps, frames: [Uint8Array w*h of 0/1],
 //         shifts?: [[dx,dy] per frame] — camera motion, so the previous frame is moved before use as context }
@@ -588,7 +588,7 @@ function decodeContainer(b) {
   // Refuse decompression bombs: a tiny link claiming huge frames.
   let px = 0;
   for (const p of parts) if (p[0] >= 1 && p[0] <= 3) px += (p[1] << 8 | p[2]) * (p[3] << 8 | p[4]) * (p[0] !== 1 ? (p[6] << 8 | p[7]) : 1);
-  if (px > 30e6) throw new Error('Link too large');
+  if (px > 12e6) throw new Error('Link too large');
   // Item types this version doesn't know (added later, or app-specific) come back raw instead of failing the link.
   return parts.map(p => p[0] >= 1 && p[0] <= 3 ? Object.assign(decodeItem(p), { bytes: p }) : { type: p[0], unknown: true, bytes: p });
 }
